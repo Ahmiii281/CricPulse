@@ -1,0 +1,186 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  TENANT_ADMIN
+  EDITOR
+  ANALYST
+  SUBSCRIBER
+}
+
+enum MatchStatus {
+  LIVE
+  UPCOMING
+  COMPLETED
+}
+
+enum MatchFormat {
+  TEST
+  ODI
+  T20
+}
+
+model Tenant {
+  id            String         @id @default(cuid())
+  name          String
+  slug          String         @unique
+  plan          String         @default("free")
+  isActive      Boolean        @default(true)
+  users         User[]
+  tournaments   Tournament[]
+  matches       Match[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+model User {
+  id            String          @id @default(cuid())
+  tenantId      String
+  tenant        Tenant          @relation(fields: [tenantId], references: [id])
+  email         String
+  passwordHash  String
+  fullName      String
+  role          UserRole
+  preferences   UserPreference?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@unique([tenantId, email])
+  @@index([tenantId, role])
+}
+
+model UserPreference {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id])
+  theme          String   @default("system")
+  favoriteTeams  String[]
+  locale         String   @default("en")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Tournament {
+  id             String   @id @default(cuid())
+  tenantId       String
+  tenant         Tenant   @relation(fields: [tenantId], references: [id])
+  name           String
+  slug           String
+  season         String
+  type           String
+  matches        Match[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([tenantId, slug, season])
+}
+
+model Team {
+  id             String   @id @default(cuid())
+  name           String
+  shortName      String
+  country        String?
+  logoUrl        String?
+  players        Player[]
+  homeMatches    Match[]  @relation("homeTeam")
+  awayMatches    Match[]  @relation("awayTeam")
+  createdAt      DateTime @default(now())
+}
+
+model Player {
+  id             String          @id @default(cuid())
+  teamId         String?
+  team           Team?           @relation(fields: [teamId], references: [id])
+  fullName       String
+  country        String
+  role           String
+  imageUrl       String?
+  bio            String
+  statistics     PlayerStatistic[]
+  createdAt      DateTime        @default(now())
+}
+
+model PlayerStatistic {
+  id             String     @id @default(cuid())
+  playerId       String
+  player         Player     @relation(fields: [playerId], references: [id])
+  format         MatchFormat
+  matches        Int
+  runs           Int
+  wickets        Int
+  battingAverage Float
+  updatedAt      DateTime   @updatedAt
+
+  @@unique([playerId, format])
+}
+
+model Match {
+  id               String            @id @default(cuid())
+  tenantId         String
+  tenant           Tenant            @relation(fields: [tenantId], references: [id])
+  tournamentId     String
+  tournament       Tournament        @relation(fields: [tournamentId], references: [id])
+  homeTeamId       String
+  homeTeam         Team              @relation("homeTeam", fields: [homeTeamId], references: [id])
+  awayTeamId       String
+  awayTeam         Team              @relation("awayTeam", fields: [awayTeamId], references: [id])
+  format           MatchFormat
+  status           MatchStatus
+  venue            String
+  tossInfo         String?
+  umpires          String[]
+  startTime        DateTime
+  scoreHome        String?
+  scoreAway        String?
+  commentary       CommentaryEvent[]
+  streamingOptions StreamingProvider[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([tenantId, status, startTime])
+}
+
+model CommentaryEvent {
+  id             String   @id @default(cuid())
+  matchId        String
+  match          Match    @relation(fields: [matchId], references: [id])
+  over           String
+  ballNumber     Int
+  text           String
+  batsman        String
+  bowler         String
+  runs           Int
+  createdAt      DateTime @default(now())
+
+  @@index([matchId, createdAt])
+}
+
+model StreamingProvider {
+  id             String   @id @default(cuid())
+  matchId        String
+  match          Match    @relation(fields: [matchId], references: [id])
+  countryCode    String
+  providerName   String
+  legalUrl       String
+  affiliateCode  String?
+  createdAt      DateTime @default(now())
+
+  @@index([matchId, countryCode])
+}
+
+model AnalyticsEvent {
+  id             String   @id @default(cuid())
+  tenantId       String?
+  eventName      String
+  properties     Json
+  createdAt      DateTime @default(now())
+
+  @@index([tenantId, eventName, createdAt])
+}
